@@ -19,18 +19,17 @@
 using namespace std;
 
 
-#define TAMAGNO_CAD 20
+#define TAMAGNO_CAD 15
 
-const int refresco = 1000000;
-const int espera = 1000000;
+int escape = 0;
 
 
 //------------------Abrimos cola de mensajes para escribir----------------//
-colamsg colaNvl("colaNivel", 0, RDWR);
+colamsg colaNvl("colaNivel", OPEN, WRONLY, TAMAGNO_CAD*sizeof(char));
 //------------------Creación memoria compartida----------------------------//
-memocomp memo_depo ("memo_depo", CREAT, RDWR, TAMAGNO_CAD*sizeof(char));
-memocomp memo_PID ("memo_PID", CREAT, RDWR, TAMAGNO_CAD*sizeof(char));
-memocomp memo_Ninicial ("memo_Ninicial", CREAT, RDWR, TAMAGNO_CAD*sizeof(char));
+memocomp memo_depo ("memo_depo", CREAT, RDWR, sizeof(float));
+memocomp memo_PID ("memo_PID", CREAT, RDWR, sizeof(float));
+memocomp memo_Ninicial ("memo_Ninicial", CREAT, RDWR, sizeof(float));
 
 //-------------------Funciones del sensor-------------------------------------//
 double lecturaAleatoria(const double valorSenial, double sigma); //Se encargar de generar de forma aleatoria el ruido
@@ -38,93 +37,77 @@ void trat_sig(int);// se encarga de aplicar el ruido a la señal
 void cierre (int);// se encarga de cerrar los diferentes procesos que implican la ejecución
 
 //------------Creamos el semáforo para sincronizar con deposito---------------//
-semaforo s1("sincro",20);
+semaforo s1("sema",0);
 
 
-int main()
+
+
+int main(void)
 {
   int sema = s1.get();
-  int i=0;
+  char cad_nvl[TAMAGNO_CAD];
   signal(SIGINT, cierre);// Si pulsamos ^C nos aseguramos de cerrar todas las
                           //memorias compartidas
 
 //-----------------Vinculamos las memorias compartidas a un puntero-----------//
-  static char *nvl_now, *pid, *Ninicial;
-  nvl_now = (char *) memo_depo.getPointer();
-  pid = (char *) memo_PID.getPointer();
-  Ninicial = (char *) memo_Ninicial.getPointer();
+  float *nvl_now_punt, *pid_punt, *Ninicial_punt;
+  nvl_now_punt = (float *) memo_depo.getPointer();
+  pid_punt = (float *) memo_PID.getPointer();
+  Ninicial_punt = (float *) memo_Ninicial.getPointer();
 
 // Lo que recibo primero del depósito(que son el valor del PID y después el
 // nivel inicial del depósito lo mando por la cadena de caracteres hacia control
-  do
-  {
-    if (i==0)
-     {
-       cout << "Esperando conexion con deposito";
-       if (i>0)
-       {
-         cout << "-";
-       }
-     }
-       usleep(100000);
-  }
-  while(sema==20);
-  i = 0;
-  cout << "> PID del deposito recibida" << endl;
-  char splbrPID;
-  splbrPID = *pid;
-  char *sPuntero;
-  sPuntero = &splbrPID;
-  colaNvl.send( sPuntero, TAMAGNO_CAD*sizeof(char));//Primero mando el PID
-  cout <<"Se acaba de mandar el PID (" << pid << ") al programa de control";
-  cout << endl;
+  cout << "Esperando conexion con deposito--->";
+  s1.down();
+
+  cout << "Conexion con el deposito establecida" << endl;
 
 
-  do
-  {
-    if (i==0)
-     {
-       cout << "Esperando conexion con deposito";
-       if (i>0)
-       {
-         cout << "-";
-       }
-     }
-     usleep(100000);
-  }
-  while(sema==21);
-  cout << "> Valor inicial del deposito recibida" << endl;
+  float pid;
+  pid = *pid_punt;
+  sprintf(cad_nvl, "%f", pid);
+  cout << "PID del deposito recibido" << endl;
 
-  char plbr_Ninicial;
-  plbr_Ninicial = *Ninicial;
-  char *plbr_Ptr;
-  plbr_Ptr = &plbr_Ninicial;
-  colaNvl.send(plbr_Ptr, TAMAGNO_CAD*sizeof(char)); //Mando el valor inicial del depósito
-  cout <<"Se acaba de mandar el dato inicial(" << Ninicial << ") al programa de control" << endl;
+  colaNvl.send(cad_nvl, TAMAGNO_CAD*sizeof(char));
+  cout << "Se acaba de mandar el PID(" << pid <<") al programa de control" << endl;
 
-  int deposito = 10;
+
+
+  float Ninicial;
+  Ninicial = *Ninicial_punt;
+
+  sprintf(cad_nvl, "%f", Ninicial);
+  cout << "Nivel inicial del deposito recibido" << endl;
+
+  colaNvl.send(cad_nvl, TAMAGNO_CAD*sizeof(char)); //Mando el valor inicial del depósito
+
+  cout <<"Se acaba de mandar el nivel inicial(" << Ninicial << ") al programa de control" << endl;
+
+
+  float nivel_actual;
   do {
 
-    char plbr_deposito;
-    plbr_deposito = *nvl_now;
-    char *plbr_de_ptr;
-    plbr_de_ptr = &plbr_deposito;
-    colaNvl.send(plbr_de_ptr, TAMAGNO_CAD*sizeof(char));
-    cout << "Se acaba de mandar el valor del deposito" << endl;
+    nivel_actual = *Ninicial_punt;
+    sprintf(cad_nvl, "%f", nivel_actual);
+    colaNvl.send(cad_nvl, TAMAGNO_CAD*sizeof(char));
+    cout << "Se acaba de mandar el valor del deposito: " << nivel_actual << endl;
+    sleep(1);
 
 
 
 
-  } while(deposito!=0);
-
-cout << fixed << setprecision(5);
 
 
+  } while(escape == 0);
+
+
+return (0);
 }
 
 void cierre (int signal)
 {
-  cout << "Cerrando las memorias compartidas";
+  escape = 1;
+  cout << "\n Cerrando las memorias compartidas";
   memo_depo.cerrar();
   cout << "-";
   memo_PID.cerrar();
@@ -151,7 +134,7 @@ void cierre (int signal)
 
   cout << "Destruccion de los semoforos";
   s1.unlink();
-  cout << "-> Se ha destruido el semaforo" << endl;
+  cout << "-> Se han destruido los semaforos" << endl;
 
 }
 

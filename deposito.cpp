@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <string>
+#include <cstdlib>
 #include <sys/wait.h>
 
 
@@ -19,58 +20,75 @@ using namespace std;
 
 
 //-----------Creación de semáforos para sincro con Sensor---------------------//
-semaforo s1("sincro");
+semaforo s1("sema");
 //------------Declaración memorias compartidas--------------//
-memocomp memo_depo("memo_depo", OPEN, RDWR, TAMAGNO_CAD*sizeof(char));
-memocomp memo_PID ("memo_PID", OPEN, RDWR, TAMAGNO_CAD*sizeof(char));
-memocomp memo_Ninicial ("memo_Ninicial", OPEN, RDWR, TAMAGNO_CAD*sizeof(char));
+memocomp memo_depo("memo_depo", OPEN, RDWR, sizeof(float));
+memocomp memo_PID ("memo_PID", OPEN, RDWR, sizeof(float));
+memocomp memo_Ninicial ("memo_Ninicial", OPEN, RDWR, sizeof(float));
 
 
 
 //-----------Declaración de las funciones que interactuan con la bomba--------//
 void on_bomba(int);
 void off_bomba(int);
-void cierre (int)
+void cierre (int);
 
 //----------Variables globales----------//
 //Aunque sea poco seguro denomino estas variables como globales y asigno el
 //puntero a la memoria compartida de esta forma para hacerlo más rápido//
-double nvl_actual;
-static char *nvl_now, nvl_now_paso;
+float nvl_actual;
+float *nvl_now_punt;
+float *nvl_now;
+int escape=0;
+float variacion=0.5;
 
 
-
-int main()
+int main(int argc,char *argv[])
 {
 
-  int sema = s1.get();
-  nvl_now = (char *) memo_depo.getPointer();
   signal(SIGUSR1, on_bomba);
   signal(SIGUSR2, off_bomba);
   signal (SIGINT, cierre);
+  float pid, Ninicial;
+
+  if (argc==2)
+  {
+    char *dato = argv[1];
+    Ninicial = atof(dato);
+  }
+
+  else
+  {
+    cout << "Se tomara como valor inicial 50" << endl;
+    Ninicial = 50;
+  }
 
 
   //------------------vinculamos las memorias a un puntero--------------//
-  static char  *pid, *Ninicial, pid_paso, Ninicial_paso;
+  float *PID_punt, *Ninicial_punt;
 
-  pid = (char *) memo_PID.getPointer();
-  Ninicial = (char *) memo_Ninicial.getPointer();
-  //------Mandamos el PID del deposito  como un char por la memoria compartida//
-  int pidI = getpid();
-  sprintf( *pid, "%d", pidI); //convertimos el nombre del PID en un char para
-  //*pid = pid_paso;                          // Para mandarlo por la memoria compartida
-  s1.up(); //Subimos el semáforo para que sensor sepa que ha recibido el pid
+  nvl_now = (float *) memo_depo.getPointer();
+  PID_punt = (float *) memo_PID.getPointer();
+  Ninicial_punt = (float *) memo_Ninicial.getPointer();
+  //------Mandamos el PID del deposito  por la memoria compartida//
+  s1.up();
 
-  double NinicialI = 50;
-  sprintf (Ninicial, "%lf", NinicialI);
-  s1.up(); //Subimos el semáforo para que sensor sepa que ha recibido el Ninicial
+  pid = getpid();
+  *PID_punt = pid;
+  cout << "> PID del deposito enviado" << pid << endl;
 
-  *Ninicial = Ninicial_paso;
-  nvl_actual = NinicialI;
+
+
+
+  *Ninicial_punt = Ninicial;
+  cout << "Nivel inicial del deposito enviado" << endl;
+
   //---------Señales recibidas de control-------------------------//
-  while (1)
+  while (escape==0)
   {
-        pause();
+    cout << *Ninicial_punt << endl;
+    *Ninicial_punt+=variacion;
+        sleep(1);
   }
 
   return (0);
@@ -78,16 +96,14 @@ int main()
 
 void on_bomba (int sig)
 {
-  nvl_actual = nvl_actual - 3.5;
-  sprintf(nvl_now_paso, "%lf", nvl_actual);
-  *nvl_now = nvl_now_paso;
+  cout << "Estado de la Bomba: activada" << endl;
+  variacion=-3.5;
 }
 
 void off_bomba(int sig)
 {
-  nvl_actual = nvl_actual + 0.5;
-  sprintf(nvl_now_paso, "%lf", nvl_actual);
-  *nvl_now = nvl_now_paso;
+  cout << "Estado de la Bomba: desactivada" << endl;
+  variacion=0.5;
 }
 
 void cierre (int signal)
@@ -103,4 +119,5 @@ void cierre (int signal)
   cout << "Cerrando los semáforos";
   s1.close();
   cout <<"-> Se han cerrado los semáforos";
+  escape =1;
 }
