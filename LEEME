@@ -1,0 +1,17 @@
+Programas a ejecutar para el correcto funcionamiento del programa.
+
+control
+sensor
+deposito
+
+Se recomienda ejecutarlos en este orden.
+Los tres programas detectan cuando alguno de los otros fallan y proceden a cerrarse.
+Se dispone de un ejecutable Makefile que compila los tres programas para facilitar su uso.
+
+
+
+Álvaro Cantera Álvarez 14 de diciembre de 2018. Grado en Ingeniería Electrónica y Automática. Informática Industrial.
+
+
+
+

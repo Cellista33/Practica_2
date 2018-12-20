@@ -21,13 +21,14 @@ using namespace std;
 
 #define TAMAGNO_CAD 15
 
-int escape = 0;
+
+
 
 
 //------------------Abrimos cola de mensajes para escribir----------------//
 colamsg colaNvl("colaNivel", OPEN, WRONLY, TAMAGNO_CAD*sizeof(char));
 //------------------Creación memoria compartida----------------------------//
-memocomp memo_depo ("memo_depo", CREAT, RDWR, sizeof(float));
+memocomp memo_depo ("memo_depo", CREAT, RDWR, sizeof(int));
 memocomp memo_PID ("memo_PID", CREAT, RDWR, sizeof(float));
 memocomp memo_Ninicial ("memo_Ninicial", CREAT, RDWR, sizeof(float));
 
@@ -42,16 +43,31 @@ semaforo s1("sema",0);
 
 
 
+int escape = 0;
+
+
+
+
 int main(void)
 {
-  int sema = s1.get();
+
+
+  double segnal_ruido, sigma=0.01;
+  system("/usr/bin/clear"); //limpia la pantalla del terminal
+  cout << "\t \033[1;4;37;40mPROGRAMA SENSOR\033[0m" << endl;
   char cad_nvl[TAMAGNO_CAD];
+  int sema = s1.get();
   signal(SIGINT, cierre);// Si pulsamos ^C nos aseguramos de cerrar todas las
-                          //memorias compartidas
+                         //memorias compartidas
 
 //-----------------Vinculamos las memorias compartidas a un puntero-----------//
-  float *nvl_now_punt, *pid_punt, *Ninicial_punt;
-  nvl_now_punt = (float *) memo_depo.getPointer();
+  float  *pid_punt, *Ninicial_punt;
+
+  int *nvl_now_punt;
+  nvl_now_punt = (int *) memo_depo.getPointer();
+  *nvl_now_punt = 0;
+
+
   pid_punt = (float *) memo_PID.getPointer();
   Ninicial_punt = (float *) memo_Ninicial.getPointer();
 
@@ -86,27 +102,56 @@ int main(void)
 
   float nivel_actual;
   do {
+    system("/usr/bin/clear"); //limpia la pantalla del terminal
+    cout << "\n \t \033[1;4;37;40mPROGRAMA SENSOR\033[0m" << endl;
 
     nivel_actual = *Ninicial_punt;
-    sprintf(cad_nvl, "%f", nivel_actual);
+
+    segnal_ruido = lecturaAleatoria(nivel_actual, sigma);
+    sprintf(cad_nvl, "%f", segnal_ruido);
     colaNvl.send(cad_nvl, TAMAGNO_CAD*sizeof(char));
-    cout << "Se acaba de mandar el valor del deposito: " << nivel_actual << endl;
+    cout << "\nNivel actual del depósito: " << nivel_actual<< "%" << endl;
+    cout << "Nivel actual del depósito con ruido: " << segnal_ruido<< "%" << endl;
+
+    cout.flush();
     sleep(1);
 
+
+    if (*nvl_now_punt==71959141) {
+      std::cout << "Se ha cerrado el programa deposito" << '\n';
+      std::cout << "A continuacion se cerraran el resto." << '\n';
+      sleep(2);
+      int comprobacion = 71959141;
+      cierre (comprobacion);
+    }
 
 
 
 
 
   } while(escape == 0);
-
-
-return (0);
 }
 
 void cierre (int signal)
 {
+
+  int *nvl_now_punt;
+  nvl_now_punt = (int *) memo_depo.getPointer();
+  char cad_nvl[TAMAGNO_CAD];
   escape = 1;
+
+  if (signal!=71959141)
+  {
+    *nvl_now_punt = 71959141;
+  }
+
+  int nivel_actual = *nvl_now_punt;
+  sprintf(cad_nvl, "%d", nivel_actual);
+  colaNvl.send(cad_nvl, TAMAGNO_CAD*sizeof(char));
+  sleep(2);
+
+
+
   cout << "\n Cerrando las memorias compartidas";
   memo_depo.cerrar();
   cout << "-";
@@ -135,6 +180,8 @@ void cierre (int signal)
   cout << "Destruccion de los semoforos";
   s1.unlink();
   cout << "-> Se han destruido los semaforos" << endl;
+
+  cout << "\n\n\tPrograma sensor finalizado.\n" << endl;
 
 }
 

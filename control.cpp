@@ -32,8 +32,7 @@ using namespace std;
 //-----------Definimos las constantes---------------//
 #define TAMAGNO_CAD 15
 const int TIMEOUT = 10; // tiempo de espera de la alarma en segundos
-
-
+int PID;
 
 
 //----------Creación de las colas de mensajes-----//
@@ -53,6 +52,10 @@ float Nmax, Nmin, escape=0;
 
 int main (int argc,char *argv[])
 {
+    system("/usr/bin/clear"); //limpia la pantalla del terminal
+    cout << "\n \t \033[1;4;37;40mPROGRAMA SISTEMA DE CONTROL DEL DEPÓSITO\033[0m";
+    cout << endl;
+
     if (argc==3)
     {
       char *d1 = argv[1];
@@ -67,14 +70,18 @@ int main (int argc,char *argv[])
 
 
     }
+    cout << "\nSe tomaran como límites del intervalo de seguridad (";
+    cout << Nmin << "%,";
+    cout << Nmax << "%)" << endl;
     signal(SIGINT, cierre);
-    float nivel;
-    float Ninicial;
-    int PID;
+    float nivel, Ninicial;
+    int cerrado = 0;
+
+
     char cad_nvl[TAMAGNO_CAD];
 
 
-    cout << "\t SISTEMA DE CONTROL DEL DEPOSITO"<< endl;
+
     cout << "Conectando con el sensor" << endl;
 
 
@@ -90,29 +97,54 @@ int main (int argc,char *argv[])
     bomba(nivel, PID);
 
 
-    do
+    while (escape==0)
     {
 
 
         colaNvl.receive(cad_nvl, TAMAGNO_CAD*sizeof(char));
-        cout << "Recibida cadena del sensor:  " << cad_nvl << endl;
+        //cout << "Recibida cadena del sensor:  " << cad_nvl << endl;
+
 
         //Transformamos los valores de la cadena a float
         nivel = atof(cad_nvl);
-        //system("/usr/bin/clear"); //liumpiamos la pantalla
-        cout << "\t SISTEMA DE CONTROL DEL DEPOSITO"<< endl;
-        cout << "Nivel inicial:" << Ninicial << "%" << endl;
-        cout << "Volumen de seguridad (" << Nmin <<"%," << Nmax << "%)" << endl;
-        cout << "Volumen actual: " << nivel <<"%"<< endl;
-        bomba(nivel, PID);
+        if (nivel != 71959141)
+        {
+          system("/usr/bin/clear"); //limpia la pantalla del terminal
+          cout << "\n \t \033[1;4;37;40mPROGRAMA SISTEMA DE CONTROL DEL DEPÓSITO\033[0m";
 
+          cout <<"\nNivel inicial:" << Ninicial << "%" << endl;
+          cout << " Volumen de seguridad (" << Nmin <<"%," << Nmax << "%)" << endl;
 
+          if (nivel <= Nmax && nivel >=Nmin)
+          {
+            cout << " Volumen actual: ";
+            printf ("\033[42m %f\033[0m", nivel);
+            cout << "%" << endl;
+          }
+          else if (nivel>=Nmax || nivel <= Nmin)
+          {
+            cout << " Volumen actual: ";
+            printf ("\033[41m %f \033[0m", nivel);
+            cout << "%" << endl;
+          }
+          cout.flush();
+          bomba(nivel, PID);
+          sleep(1);
 
-        sleep(1);
+        }
+
+        else if (nivel == 71959141 && cerrado == 0){
+          cout << "\n Se han cerrado programas necesarios para el correcto funcionamiento" << endl;
+          cout << " A continuación se cerraran los programas restantes" << endl;
+
+          cierre (PID);
+          cerrado = 1;
+        }
+
 
 
      }
-     while (escape==0);
+
 }
 
 
@@ -130,20 +162,17 @@ void bomba (float vlr_nivel, int PID)
 
 void cierre (int sign)
 {
-
-  cout << "SISTEMA CONTROL" << endl;
     escape = 1;
+
+
+    kill (PID, SIGTERM);
+    usleep(1000);
     //system("/usr/bin/clear"); //limpia la pantalla del terminal
-    cout << "Cerrando colas ";
+    cout << "\n Cerrando colas ";
     colaNvl.close();
     cout << "-";
     colaNvl.unlink();
-    cout << "-> Colas cerradas y destruidas";
+    cout << "-> Colas cerradas y destruidas" << endl;
 
-
-    cout << "->Semaforo cerrado y destruido" << endl;
-
-
-
-    cout << "Programa finalizado." << endl << endl;
+    cout << "\n\n\tPrograma control finalizado." << endl << endl;
 }
